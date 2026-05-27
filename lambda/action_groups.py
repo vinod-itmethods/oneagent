@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import boto3
+from botocore.config import Config
 import requests
 from typing import Optional
 
@@ -15,13 +16,15 @@ logger.setLevel(logging.INFO)
 
 # Cache for secrets
 _secrets_cache = {}
+_secretsmanager_client = boto3.client(
+    'secretsmanager', region_name='us-east-1',
+    config=Config(connect_timeout=5, read_timeout=10))
 
 
 def get_secret(secret_name: str) -> str:
     """Fetch secret from AWS Secrets Manager."""
     if secret_name not in _secrets_cache:
-        client = boto3.client('secretsmanager', region_name='us-east-1')
-        response = client.get_secret_value(SecretId=secret_name)
+        response = _secretsmanager_client.get_secret_value(SecretId=secret_name)
         _secrets_cache[secret_name] = response['SecretString']
     return _secrets_cache[secret_name]
 
