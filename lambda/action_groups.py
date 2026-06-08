@@ -8,6 +8,7 @@ import os
 import logging
 import boto3
 import requests
+from botocore.config import Config
 from typing import Optional
 
 logger = logging.getLogger()
@@ -16,12 +17,20 @@ logger.setLevel(logging.INFO)
 # Cache for secrets
 _secrets_cache = {}
 
+# Initialize the Secrets Manager client once, outside the handler, so it is
+# reused across Lambda invocations. Region comes from the Lambda environment
+# (AWS_REGION is set by the runtime); explicit timeouts prevent hung executions.
+_secrets_client = boto3.client(
+    'secretsmanager',
+    region_name=os.environ.get('AWS_REGION', 'us-east-1'),
+    config=Config(connect_timeout=5, read_timeout=10, retries={'max_attempts': 2}),
+)
+
 
 def get_secret(secret_name: str) -> str:
     """Fetch secret from AWS Secrets Manager."""
     if secret_name not in _secrets_cache:
-        client = boto3.client('secretsmanager', region_name='us-east-1')
-        response = client.get_secret_value(SecretId=secret_name)
+        response = _secrets_client.get_secret_value(SecretId=secret_name)
         _secrets_cache[secret_name] = response['SecretString']
     return _secrets_cache[secret_name]
 
@@ -68,6 +77,36 @@ def github_validate_repo(owner: str, repo: str) -> dict:
     if "error" in info:
         return {"valid": False, "error": info["error"]}
     return {"valid": True, "repo_info": info}
+
+
+def github_list_branches(owner: str, repo: str) -> dict:
+    """List branches for a GitHub repository."""
+    token = get_secret("oneagent/github-token")
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"Bearer {token}" if token != "placeholder-token" else None
+    }
+    headers = {k: v for k, v in headers.items() if v}
+
+    try:
+        response = requests.get(
+            f"https://api.github.com/repos/{owner}/{repo}/branches",
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 404:
+            return {"error": f"Repository {owner}/{repo} not found"}
+
+        response.raise_for_status()
+        data = response.json()
+
+        return {
+            "branches": [b["name"] for b in data]
+        }
+    except Exception as e:
+        logger.exception(f"Error listing branches: {e}")
+        return {"error": str(e)}
 
 
 def coder_list_templates() -> dict:
@@ -189,9 +228,6 @@ def lambda_handler(event, context):
     Bedrock Agent Action Group Lambda Handler.
     Routes to appropriate function based on action group and function name.
     """
-    logger.info(f"Received event: {json.dumps(event)}")
-
-    agent = event.get('agent', {})
     action_group = event.get('actionGroup', '')
     function_name = event.get('function', '')
     parameters = event.get('parameters', [])
@@ -209,6 +245,9 @@ def lambda_handler(event, context):
 
         elif function_name == "github_validate_repo":
             result = github_validate_repo(params.get('owner'), params.get('repo'))
+
+        elif function_name == "github_list_branches":
+            result = github_list_branches(params.get('owner'), params.get('repo'))
 
         elif function_name == "coder_list_templates":
             result = coder_list_templates()
