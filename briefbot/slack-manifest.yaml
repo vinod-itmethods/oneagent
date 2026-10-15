@@ -1,0 +1,49 @@
+# Paste this at https://api.slack.com/apps -> Create New App -> From a manifest.
+display_information:
+  name: Brief
+  description: My private Slack assistant. Tells me what's waiting on my reply and answers questions about my Slack.
+  background_color: "#2c2d30"
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: Brief
+    always_online: true
+oauth_config:
+  scopes:
+    # The bot only talks to you in its own DM.
+    bot:
+      - chat:write
+      - im:history
+      - im:write
+      - users:read
+    # Your user token: read-only access to what you can see, so the bot can track and search it.
+    user:
+      - search:read
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - im:history
+      - im:read
+      - mpim:history
+      - mpim:read
+      - reactions:read
+      - users:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.im          # you talking to the bot
+    user_events:
+      - message.channels    # messages in public channels you're in
+      - message.groups      # ... private channels you're in
+      - message.im          # ... your DMs
+      - message.mpim        # ... your group DMs
+      - reaction_added      # your emoji reactions count as "responded"
+  interactivity:
+    is_enabled: true        # the "Handled" buttons
+  org_deploy_enabled: false
+  socket_mode_enabled: true # no public URL needed
+  token_rotation_enabled: false

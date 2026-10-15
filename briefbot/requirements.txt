@@ -1,0 +1,5 @@
+slack_bolt>=1.21
+slack_sdk>=3.33
+anthropic>=1.14
+apscheduler>=3.10,<4
+python-dotenv>=1.0
